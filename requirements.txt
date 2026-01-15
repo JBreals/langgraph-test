@@ -41,3 +41,6 @@ urllib3==2.6.3
 uuid_utils==0.13.0
 xxhash==3.6.0
 zstandard==0.25.0
+pytz==2024.1
+wikipedia==1.4.0
+tavily==1.1.0
