@@ -26,133 +26,188 @@ INTENT_CLASSIFIER_PROMPT = """You are an intent classifier for a Korean AI assis
 - Conversation history: {history}
 - Current time: {current_datetime}
 
-## Task
-1. Classify the user's intent
-2. If the query is ambiguous (like "더 있어?"), rewrite it to be explicit
-3. Determine if tools are needed
-
 ## Intent Types
 - new_question: 새로운 주제에 대한 질문
 - follow_up: 이전 대화의 후속 질문 ("더 있어?", "또?", "다른 건?", "자세히")
 - clarification: 이전 답변에 대한 명확화 요청 ("무슨 말이야?", "예시 들어줘")
 - chitchat: 인사, 감사, 잡담 ("고마워", "안녕", "ㅋㅋ", "오키")
 
-## CRITICAL: Context Preservation for Follow-up Questions
-When rewriting follow-up questions, you MUST preserve ALL important constraints from the conversation history.
+## Think step by step, then output:
 
-Ask yourself: "What conditions/requirements from the original question still apply?"
-- User preferences (알레르기, 채식, 예산, 분위기, etc.)
-- Location constraints (지역, 위치)
-- Any specific requirements the user mentioned
-- Target subject (what they were asking about)
+### Step 1: Intent Classification
+What type of message is this? (new_question / follow_up / clarification / chitchat)
 
-These constraints should be carried forward into the rewritten query, even if the user's follow-up is brief like "더 있어?".
+### Step 2: Constraints Extraction (for follow_up)
+If follow_up, list ALL constraints from the conversation history that must be preserved:
+- Location (지역, 위치)
+- Preferences (알레르기, 채식, 예산, 분위기)
+- Subject (what they were asking about)
+- Any other requirements
 
-## Time Context Awareness
-Current time is provided above. Ask yourself: "Would adding time context make this query more relevant?"
+### Step 3: Time Context
+Should I add time context (year/date)?
+- Yes if: 요즘, 최신, 트렌드, 인기, 뉴스, 이벤트
+- No if: 역사, 정의, 개념, timeless facts
 
-Consider adding time (year/month) when:
-- The query implies recency (최신, 요즘, 현재, 지금, 올해, etc.)
-- The results would be significantly different based on time (트렌드, 뉴스, 인기, 랭킹, etc.)
-- The information is time-sensitive (이벤트, 세일, 공연, 전시, etc.)
+### Step 4: Rewritten Query
+Rewrite the query to be explicit, preserving all constraints from Step 2.
 
-Handling '요즘/최근/올해' expressions:
-- If currently 연초 (early in the year): include BOTH current and previous year for richer results (e.g., "2025-2026 맛집 추천")
-- Otherwise: use current year or recent timeframe
+### Step 5: Tool Needed?
+Does this require external tools (search, calculator, etc.)?
 
-Do NOT add time when:
-- The query is about timeless facts (역사, 정의, 개념 설명)
-- Adding time would make the query unnatural
-
-## Output Format (JSON)
-{{
-  "intent": "new_question|follow_up|clarification|chitchat",
-  "rewritten_query": "명확하게 재작성된 질문 (chitchat인 경우 빈 문자열)",
-  "needs_tool": true|false,
-  "reasoning": "판단 이유 (한 줄)"
-}}
+## Output format:
+---
+Intent: [new_question|follow_up|clarification|chitchat]
+Constraints: [list of preserved constraints, or "none" for new questions]
+Time context: [yes/no and reason]
+Rewritten query: [explicit query with all constraints]
+Needs tool: [true|false]
+---
 
 ## Examples
 
-User: "1940년에 무슨 일이 있었어?"
-History: (없음)
-→ {{"intent": "new_question", "rewritten_query": "1940년 역사적 사건", "needs_tool": true, "reasoning": "새로운 질문, 검색 필요"}}
-
 User: "더 있어?"
-History: "User: 영등포 견과류 알레르기 안전한 맛집 추천 / Assistant: A식당, B식당 추천..."
-→ {{"intent": "follow_up", "rewritten_query": "영등포 견과류 알레르기 안전한 다른 맛집 추천", "needs_tool": true, "reasoning": "후속 질문, 위치+알레르기 조건 유지하며 추가 검색"}}
-
-User: "더 알려줘"
-History: "User: 1940년 역사적 사건 / Assistant: 2차대전, 한국전쟁..."
-→ {{"intent": "follow_up", "rewritten_query": "1940년 다른 역사적 사건 (과학, 문화, 경제 등)", "needs_tool": true, "reasoning": "후속 질문, 다른 카테고리로 검색"}}
+History: "[User]: 영등포 견과류 알레르기 안전한 맛집 추천해줘 [Assistant]: A식당, B식당을 추천드립니다..."
+---
+Intent: follow_up
+Constraints: 위치(영등포), 제약사항(견과류 알레르기 안전), 주제(맛집)
+Time context: no (맛집은 시간 무관)
+Rewritten query: 영등포 견과류 알레르기 안전한 다른 맛집 추천
+Needs tool: true
+---
 
 User: "고마워!"
 History: (any)
-→ {{"intent": "chitchat", "rewritten_query": "", "needs_tool": false, "reasoning": "감사 인사, 도구 불필요"}}
-
-User: "그게 무슨 뜻이야?"
-History: "머신러닝 설명함"
-→ {{"intent": "clarification", "rewritten_query": "머신러닝 쉽게 설명", "needs_tool": false, "reasoning": "명확화 요청, 이전 답변 재설명"}}
-
-User: "오늘 날씨 어때?"
-History: (any)
-→ {{"intent": "new_question", "rewritten_query": "오늘 날씨", "needs_tool": true, "reasoning": "새로운 질문, 날씨 도구 필요"}}
+---
+Intent: chitchat
+Constraints: none
+Time context: no
+Rewritten query:
+Needs tool: false
+---
 
 User: "요즘 핫한 카페 알려줘"
 History: (없음), Current time: 2025년 1월
-→ {{"intent": "new_question", "rewritten_query": "2025년 인기 카페 추천", "needs_tool": true, "reasoning": "시간 민감 질문, 현재 연도 추가"}}
+---
+Intent: new_question
+Constraints: none
+Time context: yes (요즘 = 시간 민감)
+Rewritten query: 2025년 인기 카페 추천
+Needs tool: true
+---
 
-Output JSON:"""
+User: "오늘 서울시는 미세먼지 저감 대책의 일환으로 차량 2부제를 시행한다고 발표했다. 이에 따라 홀수 날짜에는 홀수 번호판 차량만... (긴 본문)"
+History: (없음)
+---
+Intent: new_question
+Constraints: none
+Time context: no
+Rewritten query: (사용자가 제공한 콘텐츠 분석/처리)
+Needs tool: false
+---"""
 
 
-def _format_history(messages: list[dict[str, str]], max_items: int = 5) -> str:
-    """대화 히스토리를 문자열로 포맷."""
+def _format_history(messages: list[dict[str, str]], max_chars: int = 3000) -> str:
+    """대화 히스토리를 문자열로 포맷 (최신 우선 보존).
+
+    Args:
+        messages: 대화 히스토리
+        max_chars: 최대 문자 수
+
+    Returns:
+        포맷된 히스토리 문자열
+    """
     if not messages:
         return "(없음)"
 
-    recent = messages[-max_items * 2:]
     lines = []
-    for msg in recent:
-        role = "User" if msg.get("role") == "user" else "Assistant"
-        content = msg.get("content", "")[:150]
-        if len(msg.get("content", "")) > 150:
-            content += "..."
-        lines.append(f"- {role}: {content}")
+    total_chars = 0
 
-    return "\n".join(lines) if lines else "(없음)"
+    # 최신 메시지부터 역순으로 추가 (최근 게 더 중요)
+    for msg in reversed(messages):
+        role = "User" if msg.get("role") == "user" else "Assistant"
+        content = msg.get("content", "")
+        line = f"[{role}]: {content}"
+
+        if total_chars + len(line) > max_chars:
+            # 남은 공간에 맞게 자르기
+            remaining = max_chars - total_chars
+            if remaining > 100:
+                truncated = content[: remaining - 50] + "..."
+                lines.insert(0, f"[{role}]: {truncated}")
+            break
+
+        lines.insert(0, line)  # 순서 유지를 위해 앞에 삽입
+        total_chars += len(line) + 2  # \n\n 고려
+
+    return "\n\n".join(lines) if lines else "(없음)"
 
 
 def _parse_intent_response(response_text: str, fallback_query: str) -> dict:
-    """Intent classifier 응답 파싱. JSON 실패 시 fallback."""
+    """Intent classifier CoT 응답 파싱.
+
+    Args:
+        response_text: LLM 응답 텍스트
+        fallback_query: 파싱 실패 시 사용할 기본 쿼리
+
+    Returns:
+        파싱된 결과 dict (intent, rewritten_query, needs_tool, metadata)
+    """
     text = response_text.strip()
 
-    # 마크다운 코드블록 제거
-    if text.startswith("```"):
-        text = re.sub(r"^```(?:json)?\s*\n?", "", text)
-        text = re.sub(r"\n?```$", "", text)
-
-    try:
-        data = json.loads(text)
-        return {
-            "intent": data.get("intent", "new_question"),
-            "rewritten_query": data.get("rewritten_query", fallback_query),
-            "needs_tool": data.get("needs_tool", True),
-            "reasoning": data.get("reasoning", ""),
-        }
-    except json.JSONDecodeError:
-        pass
-
-    # Fallback: regex로 파싱 시도
-    intent_match = re.search(r'"intent"\s*:\s*"([^"]+)"', text)
-    query_match = re.search(r'"rewritten_query"\s*:\s*"([^"]*)"', text)
-    needs_tool_match = re.search(r'"needs_tool"\s*:\s*(true|false)', text, re.I)
-
-    return {
-        "intent": intent_match.group(1) if intent_match else "new_question",
-        "rewritten_query": query_match.group(1) if query_match else fallback_query,
-        "needs_tool": needs_tool_match.group(1).lower() == "true" if needs_tool_match else True,
-        "reasoning": "fallback parsing",
+    result = {
+        "intent": "new_question",
+        "rewritten_query": fallback_query,
+        "needs_tool": True,
+        "constraints": "",
     }
+
+    # Intent 추출
+    intent_match = re.search(
+        r'Intent:\s*(new_question|follow_up|clarification|chitchat)',
+        text,
+        re.IGNORECASE
+    )
+    if intent_match:
+        result["intent"] = intent_match.group(1).lower()
+
+    # Constraints 추출 (디버깅/로깅용)
+    constraints_match = re.search(
+        r'Constraints:\s*(.+?)(?:\n|---|$)',
+        text,
+        re.IGNORECASE
+    )
+    if constraints_match:
+        result["constraints"] = constraints_match.group(1).strip()
+
+    # Rewritten query 추출
+    query_match = re.search(
+        r'Rewritten query:\s*(.+?)(?:\n|---|$)',
+        text,
+        re.IGNORECASE
+    )
+    if query_match:
+        query = query_match.group(1).strip()
+        # 대괄호, 따옴표 제거
+        query = re.sub(r'^[\["\']|[\]"\']$', '', query)
+        if query and query.lower() != "none":
+            result["rewritten_query"] = query
+
+    # Needs tool 추출
+    needs_tool_match = re.search(
+        r'Needs tool:\s*(true|false)',
+        text,
+        re.IGNORECASE
+    )
+    if needs_tool_match:
+        result["needs_tool"] = needs_tool_match.group(1).lower() == "true"
+
+    # chitchat이면 needs_tool = False 강제
+    if result["intent"] == "chitchat":
+        result["needs_tool"] = False
+        result["rewritten_query"] = ""
+
+    return result
 
 
 def intent_classifier_node(state: PTEState) -> dict:
@@ -185,10 +240,14 @@ def intent_classifier_node(state: PTEState) -> dict:
     try:
         response = llm.invoke([
             SystemMessage(content=prompt),
-            HumanMessage(content="Output JSON:"),
+            HumanMessage(content=f"User message: {user_input}"),
         ])
 
         result = _parse_intent_response(response.content, user_input)
+
+        # 디버깅용 로그 (필요시 활성화)
+        # if result.get("constraints"):
+        #     print(f"[IntentClassifier] Constraints: {result['constraints']}")
 
         return {
             "intent": result["intent"],

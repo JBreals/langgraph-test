@@ -48,7 +48,17 @@ GENERAL_CONVERSATION_PROMPT = """You are a friendly AI assistant.
 ## Conversation History
 {conversation_history}
 
-Respond naturally to the user's message. Consider conversation history for context.
+## User's Request
+{original_input}
+
+## How to respond:
+1. If user gave an instruction (번역, 요약, 분석, 설명 등) with content → perform that action
+2. If user only provided content without clear instruction → analyze the content
+   - Identify what type of content it is (article, code, data, etc.)
+   - Provide key insights, main points, or notable aspects
+   - Ask if they'd like further action (번역, 요약, 상세 설명 등)
+3. If it's a simple question or chat → respond naturally
+
 Respond in the same language as the user's input."""
 
 
@@ -83,7 +93,7 @@ def final_answer_node(state: PTEState) -> dict:
     original_input = state["input"]
     rewritten_query = state.get("rewritten_query") or original_input
 
-    # 실행 결과가 없는 경우 (도구 불필요 - 일반 대화)
+    # 실행 결과가 없는 경우 (도구 불필요 - 일반 대화/콘텐츠 처리)
     if not state["past_steps"]:
         llm = get_llm(
             model=settings.final_model,
@@ -93,11 +103,12 @@ def final_answer_node(state: PTEState) -> dict:
         system_prompt = GENERAL_CONVERSATION_PROMPT.format(
             current_datetime=current_datetime,
             conversation_history=history_text,
+            original_input=original_input,
         )
 
         response = llm.invoke([
             SystemMessage(content=system_prompt),
-            HumanMessage(content=rewritten_query),
+            HumanMessage(content="Respond to the user's request above."),
         ])
 
         return {"result": response.content}

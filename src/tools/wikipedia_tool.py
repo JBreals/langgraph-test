@@ -9,6 +9,7 @@ def search_wikipedia(
     context: str | None = None,
     from_previous_step: bool = False,
     history: list[dict[str, str]] | None = None,
+    intent: str = "new_question",
 ) -> str:
     """Wikipedia에서 정보를 검색합니다.
 
@@ -18,13 +19,14 @@ def search_wikipedia(
         context: 원래 사용자 요청 (쿼리 증강에 사용)
         from_previous_step: 이전 도구 출력을 입력으로 사용하는 경우 True
         history: 대화 히스토리 (검색 깊이 결정에 사용)
+        intent: 질문 의도 (new_question, follow_up 등)
 
     Returns:
         Wikipedia 검색 결과
     """
-    # Wikipedia용 쿼리 최적화 + 검색 깊이 결정 (LLM 기반)
+    # Wikipedia용 쿼리 최적화 + 검색 깊이 결정 (Intent 기반)
     search_query, sentences, was_changed = enhance_query_for_wikipedia(
-        query, context, from_previous_step, history
+        query, context, from_previous_step, history, intent
     )
 
     # 결과 출력에 쿼리 정보 포함 (항상)

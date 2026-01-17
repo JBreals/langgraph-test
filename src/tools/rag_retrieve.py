@@ -22,6 +22,7 @@ def rag_retrieve(
     context: str | None = None,
     from_previous_step: bool = False,
     history: list[dict[str, str]] | None = None,
+    intent: str = "new_question",
 ) -> str:
     """벡터 스토어에서 관련 문서를 검색합니다.
 
@@ -31,13 +32,14 @@ def rag_retrieve(
         context: 원래 사용자 요청 (쿼리 증강에 사용)
         from_previous_step: 이전 도구 출력을 입력으로 사용하는 경우 True
         history: 대화 히스토리 (중복 방지에 사용)
+        intent: 질문 의도 (new_question, follow_up 등)
 
     Returns:
         검색된 문서 내용
     """
-    # LLM 기반 쿼리 증강 (대화 히스토리 포함)
+    # LLM 기반 쿼리 증강 (Intent 기반 처리)
     enhanced_query, was_enhanced = maybe_enhance_query(
-        query, context, from_previous_step, history
+        query, context, from_previous_step, history, intent
     )
 
     store_type = RAG_STORE_TYPE.lower()

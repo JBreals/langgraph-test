@@ -28,6 +28,7 @@ def executor_node(state: PTEState) -> dict:
     past_steps = list(state["past_steps"])
     user_input = state["input"]  # 원래 사용자 요청
     messages = state.get("messages", [])  # 대화 히스토리
+    intent = state.get("intent", "new_question")  # 질문 의도
 
     if not plan:
         return {"plan": [], "past_steps": past_steps}
@@ -58,7 +59,7 @@ def executor_node(state: PTEState) -> dict:
     tool_name = step.get("tool")
 
     try:
-        # 검색 도구인 경우 context, from_previous_step, history 자동 주입
+        # 검색 도구인 경우 context, from_previous_step, history, intent 자동 주입
         if tool_name in SEARCH_TOOLS:
             output = run_tool(
                 tool_name,
@@ -66,6 +67,7 @@ def executor_node(state: PTEState) -> dict:
                 context=user_input,
                 from_previous_step=from_previous_step,
                 history=messages,
+                intent=intent,
             )
         else:
             output = run_tool(tool_name, tool_input)

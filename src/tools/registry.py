@@ -40,6 +40,7 @@ def run_tool(
     context: str | None = None,
     from_previous_step: bool = False,
     history: list[dict[str, str]] | None = None,
+    intent: str = "new_question",
 ) -> str:
     """도구 실행 (스키마 기반 검증 포함).
 
@@ -49,6 +50,7 @@ def run_tool(
         context: 검색 도구용 컨텍스트 (쿼리 증강에 사용)
         from_previous_step: 이전 도구 출력을 입력으로 사용하는 경우 True
         history: 대화 히스토리 (검색 도구에서 중복 방지에 사용)
+        intent: 질문 의도 (new_question, follow_up 등)
 
     Returns:
         실행 결과 문자열
@@ -79,10 +81,11 @@ def run_tool(
             return tool_fn()
     else:
         # 정규화된 dict 입력
-        # 검색 도구인 경우 context, from_previous_step, history 추가
+        # 검색 도구인 경우 context, from_previous_step, history, intent 추가
         if tool_name in ("web_search", "rag_retrieve", "search_wikipedia"):
             if context:
                 validated_input["context"] = context
             validated_input["from_previous_step"] = from_previous_step
             validated_input["history"] = history
+            validated_input["intent"] = intent
         return tool_fn(**validated_input)
