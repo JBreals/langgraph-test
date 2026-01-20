@@ -1,7 +1,36 @@
 """Web search tool with automatic query enhancement."""
 
+import re
+
 from src.config import settings
 from src.tools.query_enhancer import maybe_enhance_query
+
+
+def _extract_urls(query: str) -> list[str]:
+    """쿼리에서 모든 URL 추출. 없으면 빈 리스트."""
+    return re.findall(r'https?://[^\s]+', query)
+
+
+def _extract_webpages(client, urls: list[str]) -> str:
+    """Tavily extract API로 웹페이지 내용 추출 (여러 URL 지원)."""
+    response = client.extract(urls=urls)
+    results = response.get("results", [])
+
+    if not results:
+        return f"[URL 추출 실패] {', '.join(urls)}에서 내용을 가져올 수 없습니다."
+
+    output = []
+    for r in results:
+        url = r.get("url", "")
+        raw_content = r.get("raw_content", "")
+        if raw_content:
+            # 여러 URL일 때는 각각 더 짧게
+            max_len = 5000 if len(urls) == 1 else 3000
+            if len(raw_content) > max_len:
+                raw_content = raw_content[:max_len] + "\n\n... (내용이 길어 일부만 표시)"
+            output.append(f"[URL 추출] {url}\n\n{raw_content}")
+
+    return "\n\n---\n\n".join(output)
 
 
 def web_search(
@@ -10,33 +39,43 @@ def web_search(
     from_previous_step: bool = False,
     history: list[dict[str, str]] | None = None,
     intent: str = "new_question",
+    time_sensitive: str = "none",
 ) -> str:
     """웹에서 정보를 검색합니다.
 
+    URL이 포함된 쿼리는 해당 페이지 내용을 직접 추출합니다.
+    일반 쿼리는 웹 검색을 수행합니다.
+
     Args:
-        query: 검색어
+        query: 검색어 또는 URL
         context: 원래 사용자 요청 (쿼리 증강에 사용)
         from_previous_step: 이전 도구 출력을 입력으로 사용하는 경우 True
         history: 대화 히스토리 (중복 방지에 사용)
         intent: 질문 의도 (new_question, follow_up 등)
+        time_sensitive: 시간 민감도 (none, current, specified)
 
     Returns:
-        검색 결과
+        검색 결과 또는 URL 내용
     """
     api_key = settings.tavily_api_key
 
     if not api_key:
         raise ValueError("TAVILY_API_KEY가 설정되지 않았습니다.")
 
-    # LLM 기반 쿼리 증강 (Intent 기반 처리)
-    enhanced_query, was_enhanced = maybe_enhance_query(
-        query, context, from_previous_step, history, intent
-    )
-
     try:
         from tavily import TavilyClient
-
         client = TavilyClient(api_key=api_key)
+
+        # URL이 포함된 경우 → extract API로 직접 추출 (LLM 안 태움)
+        urls = _extract_urls(query)
+        if urls:
+            return _extract_webpages(client, urls)
+
+        # 일반 검색 → 쿼리 증강 후 search API
+        enhanced_query, was_enhanced = maybe_enhance_query(
+            query, context, from_previous_step, history, intent, time_sensitive
+        )
+
         response = client.search(
             query=enhanced_query,
             search_depth="advanced",

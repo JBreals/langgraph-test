@@ -10,6 +10,7 @@ def search_wikipedia(
     from_previous_step: bool = False,
     history: list[dict[str, str]] | None = None,
     intent: str = "new_question",
+    time_sensitive: str = "none",  # 사용하지 않음 (Wikipedia는 팩트 기반)
 ) -> str:
     """Wikipedia에서 정보를 검색합니다.
 
@@ -20,6 +21,7 @@ def search_wikipedia(
         from_previous_step: 이전 도구 출력을 입력으로 사용하는 경우 True
         history: 대화 히스토리 (검색 깊이 결정에 사용)
         intent: 질문 의도 (new_question, follow_up 등)
+        time_sensitive: 시간 민감도 (Wikipedia에서는 사용하지 않음)
 
     Returns:
         Wikipedia 검색 결과

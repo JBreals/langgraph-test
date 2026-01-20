@@ -54,14 +54,23 @@ PLANNER_PROMPT = """You are a Planner that analyzes user requests and creates ex
 6. Exclusion keywords ("제외", "빼고", "없이") have limited effectiveness in search engines
    - Prefer positive phrasing: "고기 제외" → "채식 맛집", "매운음식 빼고" → "순한 음식"
    - If exclusion is essential, keep it but note that results may not be perfectly filtered
+7. **Year handling in search queries**:
+   - If user specified a year (e.g., "2023년", "작년"), KEEP it as-is
+   - If user didn't specify a year but wants recent info ("최신", "요즘"), do NOT add years yourself
+   - Query Enhancer will automatically add appropriate year context when needed
+8. **Search tool input - NO KNOWLEDGE INJECTION**:
+   - For search tools (`web_search`, `rag_retrieve`, `search_wikipedia`), pass the query as-is
+   - Do NOT add your own knowledge/keywords (e.g., "RBAC", "베스트 프랙티스", "CNI")
+   - Query Enhancer handles optimization automatically
+   - Bad: "쿠버네티스 보안" → "쿠버네티스 보안 RBAC 네트워크 정책 베스트 프랙티스"
+   - Good: "쿠버네티스 보안" → "쿠버네티스 보안"
 
 {tool_manifest}
 
 ## Handling Follow-up Questions
 When intent is "follow_up" (user asking for more/different results):
-- Include keywords like "추가", "다른", "더" in the search input
-- Reference what category/angle to explore differently
-- Example: Previous search was about "한식 맛집" → New search: "영등포 양식 이탈리안 맛집 추가 추천"
+- Pass user's query to search tools without modification
+- Query Enhancer will automatically diversify based on conversation history
 
 ## Tool Chaining
 To use output from a previous step as input, use `input_from: "step_N"` (N = step_id).

@@ -23,6 +23,7 @@ INTENT_CLASSIFIER_PROMPT = """You are an intent classifier for a Korean AI assis
 
 ## Input
 - User message: {user_input}
+- Previous context: {previous_context}
 - Conversation history: {history}
 - Current time: {current_datetime}
 
@@ -38,29 +39,46 @@ INTENT_CLASSIFIER_PROMPT = """You are an intent classifier for a Korean AI assis
 What type of message is this? (new_question / follow_up / clarification / chitchat)
 
 ### Step 2: Constraints Extraction (for follow_up)
-If follow_up, list ALL constraints from the conversation history that must be preserved:
+If follow_up, list ALL constraints that must be preserved.
+**IMPORTANT**: Use "Previous context" first (if available), then conversation history.
+- Time/Year (연도, 기간) - e.g., "2022년", "2020~2024년"
 - Location (지역, 위치)
 - Preferences (알레르기, 채식, 예산, 분위기)
 - Subject (what they were asking about)
 - Any other requirements
 
-### Step 3: Time Context
-Should I add time context (year/date)?
-- Yes if: 요즘, 최신, 트렌드, 인기, 뉴스, 이벤트
-- No if: 역사, 정의, 개념, timeless facts
+⚠️ Time constraints are especially important! If "Previous context" has a year, PRESERVE it.
+
+### Step 3: Time Sensitive
+Is this query time-sensitive?
+- current: 현재/최신 기준 (요즘, 최신, 트렌드, 인기, 핫한, 올해)
+- specified: 사용자가 연도/기간 지정 (2020년, 작년, 90년대)
+- none: 시간 무관 (정의, 개념, 역사적 사실, 원리)
+
+⚠️ IMPORTANT: Time expression handling:
+- current: PRESERVE existing time expressions ("요즘", "최신", "트렌드")
+- specified: PRESERVE user's year/period, do NOT add new time expressions like "최신"
+  - "2024년 쿠버네티스 정보" → "2024년 쿠버네티스 정보" (O)
+  - "2024년 쿠버네티스 정보" → "2024년 쿠버네티스 최신 정보" (X) ← 불필요한 "최신" 추가
+- none: No time expressions needed
 
 ### Step 4: Rewritten Query
 Rewrite the query to be explicit, preserving all constraints from Step 2.
+Do NOT add time expressions that user didn't use.
 
 ### Step 5: Tool Needed?
 Does this require external tools (search, calculator, etc.)?
+- new_question: 대부분 true (검색, 계산 등 필요)
+- follow_up: 새로운 정보 요청이면 true, 이전 답변 재설명만이면 false
+- clarification: 이전 답변 재설명이면 false, 추가 정보 필요하면 true
+- chitchat: 항상 false
 
 ## Output format:
 ---
 Intent: [new_question|follow_up|clarification|chitchat]
 Constraints: [list of preserved constraints, or "none" for new questions]
-Time context: [yes/no and reason]
-Rewritten query: [explicit query with all constraints]
+Time sensitive: [none|current|specified]
+Rewritten query: [explicit query with all constraints, preserve time expressions]
 Needs tool: [true|false]
 ---
 
@@ -71,7 +89,7 @@ History: "[User]: 영등포 견과류 알레르기 안전한 맛집 추천해줘
 ---
 Intent: follow_up
 Constraints: 위치(영등포), 제약사항(견과류 알레르기 안전), 주제(맛집)
-Time context: no (맛집은 시간 무관)
+Time sensitive: none
 Rewritten query: 영등포 견과류 알레르기 안전한 다른 맛집 추천
 Needs tool: true
 ---
@@ -81,7 +99,7 @@ History: (any)
 ---
 Intent: chitchat
 Constraints: none
-Time context: no
+Time sensitive: none
 Rewritten query:
 Needs tool: false
 ---
@@ -91,8 +109,49 @@ History: (없음), Current time: 2025년 1월
 ---
 Intent: new_question
 Constraints: none
-Time context: yes (요즘 = 시간 민감)
-Rewritten query: 2025년 인기 카페 추천
+Time sensitive: current
+Rewritten query: 요즘 핫한 카페 추천
+Needs tool: true
+---
+
+User: "2024년 쿠버네티스 정보 알려줘"
+History: (없음)
+---
+Intent: new_question
+Constraints: none
+Time sensitive: specified
+Rewritten query: 2024년 쿠버네티스 정보
+Needs tool: true
+---
+
+User: "무슨 말이야? 다시 설명해줘"
+History: "[User]: 쿠버네티스 뭐야? [Assistant]: 쿠버네티스는 컨테이너 오케스트레이션 플랫폼입니다..."
+---
+Intent: clarification
+Constraints: 주제(쿠버네티스)
+Time sensitive: none
+Rewritten query: 쿠버네티스 설명 재요청
+Needs tool: false
+---
+
+User: "그럼 2022년에는 어떤 기능이 추가됐어?"
+History: "[User]: 쿠버네티스 뭐야? [Assistant]: 쿠버네티스는 컨테이너 오케스트레이션 플랫폼입니다..."
+---
+Intent: follow_up
+Constraints: 주제(쿠버네티스)
+Time sensitive: specified
+Rewritten query: 2022년 쿠버네티스 추가된 기능
+Needs tool: true
+---
+
+User: "보안 측면에서 더 알려줘"
+Previous context: "2022년 쿠버네티스 정보"
+History: "[User]: 2022년 쿠버네티스 정보 알려줘 [Assistant]: 2022년 쿠버네티스는..."
+---
+Intent: follow_up
+Constraints: 연도(2022년), 주제(쿠버네티스)
+Time sensitive: specified
+Rewritten query: 2022년 쿠버네티스 보안
 Needs tool: true
 ---
 
@@ -101,7 +160,7 @@ History: (없음)
 ---
 Intent: new_question
 Constraints: none
-Time context: no
+Time sensitive: none
 Rewritten query: (사용자가 제공한 콘텐츠 분석/처리)
 Needs tool: false
 ---"""
@@ -151,7 +210,7 @@ def _parse_intent_response(response_text: str, fallback_query: str) -> dict:
         fallback_query: 파싱 실패 시 사용할 기본 쿼리
 
     Returns:
-        파싱된 결과 dict (intent, rewritten_query, needs_tool, metadata)
+        파싱된 결과 dict (intent, rewritten_query, needs_tool, time_sensitive, metadata)
     """
     text = response_text.strip()
 
@@ -159,6 +218,7 @@ def _parse_intent_response(response_text: str, fallback_query: str) -> dict:
         "intent": "new_question",
         "rewritten_query": fallback_query,
         "needs_tool": True,
+        "time_sensitive": "none",
         "constraints": "",
     }
 
@@ -179,6 +239,15 @@ def _parse_intent_response(response_text: str, fallback_query: str) -> dict:
     )
     if constraints_match:
         result["constraints"] = constraints_match.group(1).strip()
+
+    # Time sensitive 추출
+    time_match = re.search(
+        r'Time sensitive:\s*(none|current|specified)',
+        text,
+        re.IGNORECASE
+    )
+    if time_match:
+        result["time_sensitive"] = time_match.group(1).lower()
 
     # Rewritten query 추출
     query_match = re.search(
@@ -222,6 +291,7 @@ def intent_classifier_node(state: PTEState) -> dict:
     user_input = state["input"]
     messages = state.get("messages", [])
     current_datetime = state.get("current_datetime", "")
+    previous_rewritten_query = state.get("previous_rewritten_query")
 
     # LLM 호출
     llm = get_llm(
@@ -231,8 +301,12 @@ def intent_classifier_node(state: PTEState) -> dict:
 
     history_text = _format_history(messages)
 
+    # 이전 맥락 포맷팅
+    previous_context = previous_rewritten_query if previous_rewritten_query else "(없음)"
+
     prompt = INTENT_CLASSIFIER_PROMPT.format(
         user_input=user_input,
+        previous_context=previous_context,
         history=history_text,
         current_datetime=current_datetime,
     )
@@ -253,6 +327,7 @@ def intent_classifier_node(state: PTEState) -> dict:
             "intent": result["intent"],
             "rewritten_query": result["rewritten_query"] or user_input,
             "needs_tool": result["needs_tool"],
+            "time_sensitive": result["time_sensitive"],
         }
 
     except Exception as e:
@@ -261,4 +336,5 @@ def intent_classifier_node(state: PTEState) -> dict:
             "intent": "new_question",
             "rewritten_query": user_input,
             "needs_tool": True,
+            "time_sensitive": "none",
         }

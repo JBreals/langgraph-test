@@ -22,17 +22,19 @@ def get_current_datetime_str() -> str:
 def run_agent(
     user_input: str,
     messages: list[dict[str, str]],
+    previous_rewritten_query: str | None = None,
     verbose: bool = False,
-) -> str:
+) -> tuple[str, str | None]:
     """에이전트 실행.
 
     Args:
         user_input: 사용자 입력
         messages: 대화 히스토리
+        previous_rewritten_query: 이전 턴의 재작성된 쿼리 (맥락 유지용)
         verbose: 상세 로그 출력 여부
 
     Returns:
-        최종 결과
+        Tuple of (최종 결과, 현재 턴의 rewritten_query)
     """
     graph = get_pte_graph()
 
@@ -44,6 +46,7 @@ def run_agent(
     initial_state: PTEState = {
         "input": user_input,
         "messages": messages,
+        "previous_rewritten_query": previous_rewritten_query,
         "current_datetime": current_datetime,
         "tool_manifest": tool_manifest,
         "available_tools": available_tools,
@@ -51,6 +54,7 @@ def run_agent(
         "intent": "",
         "rewritten_query": "",
         "needs_tool": True,
+        "time_sensitive": "none",
         # 계획 및 실행
         "plan": [],
         "past_steps": [],
@@ -106,11 +110,15 @@ def run_agent(
                 final_state = node_output
 
         print(f"\n{'═' * 40}\n")
-        return final_state.get("result", "결과를 생성하지 못했습니다.") if final_state else "결과 없음"
+        result = final_state.get("result", "결과를 생성하지 못했습니다.") if final_state else "결과 없음"
+        rewritten = final_state.get("rewritten_query") if final_state else None
+        return result, rewritten
     else:
         # 일반 모드
         final_state = graph.invoke(initial_state)
-        return final_state.get("result", "결과를 생성하지 못했습니다.")
+        result = final_state.get("result", "결과를 생성하지 못했습니다.")
+        rewritten = final_state.get("rewritten_query")
+        return result, rewritten
 
 
 def setup_logging(verbose: bool):
@@ -136,6 +144,8 @@ def main():
 
     # 대화 히스토리
     conversation_history: list[dict[str, str]] = []
+    # 이전 턴의 재작성된 쿼리 (맥락 유지용)
+    previous_rewritten_query: str | None = None
 
     print("=" * 50)
     print("PTE (Plan-then-Execute) Agent")
@@ -166,15 +176,24 @@ def main():
             # /clear 명령으로 대화 초기화
             if user_input.lower() == "/clear":
                 conversation_history.clear()
+                previous_rewritten_query = None
                 print("대화 히스토리가 초기화되었습니다.")
                 continue
 
             print("\n[처리 중...]\n")
-            result = run_agent(user_input, conversation_history, verbose=verbose)
+            result, current_rewritten = run_agent(
+                user_input,
+                conversation_history,
+                previous_rewritten_query=previous_rewritten_query,
+                verbose=verbose,
+            )
 
             # 대화 히스토리에 추가
             conversation_history.append({"role": "user", "content": user_input})
             conversation_history.append({"role": "assistant", "content": result})
+
+            # 다음 턴을 위해 rewritten_query 저장
+            previous_rewritten_query = current_rewritten
 
             print(f"Agent: {result}")
             print()

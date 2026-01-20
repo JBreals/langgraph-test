@@ -15,6 +15,7 @@ class PTEState(TypedDict):
     Attributes:
         input: 사용자 요청 원문
         messages: 대화 히스토리 [{"role": "user"|"assistant", "content": "..."}]
+        previous_rewritten_query: 이전 턴의 재작성된 쿼리 (맥락 유지용)
         current_datetime: 현재 날짜/시간 (KST)
         tool_manifest: 사용 가능한 도구 목록 (텍스트)
         available_tools: 허용된 도구 이름 목록
@@ -34,6 +35,9 @@ class PTEState(TypedDict):
     # 대화 히스토리 (주입)
     messages: list[dict[str, str]]
 
+    # 이전 턴의 재작성된 쿼리 (주입, 맥락 유지용)
+    previous_rewritten_query: str | None
+
     # 컨텍스트 (주입)
     current_datetime: str
 
@@ -45,6 +49,7 @@ class PTEState(TypedDict):
     intent: str  # follow_up, new_question, chitchat, clarification
     rewritten_query: str  # 명확하게 재작성된 질문
     needs_tool: bool  # 도구 사용 필요 여부
+    time_sensitive: str  # none, current, specified
 
     # 계획
     plan: list[dict[str, Any]]

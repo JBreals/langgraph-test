@@ -31,8 +31,12 @@ FINAL_ANSWER_PROMPT = """You are a Final Answer node that delivers execution res
 
 ## Rules
 1. Answer based on execution results, naturally incorporating the system's interpretation
-2. If original and rewritten queries differ, smoothly acknowledge what you understood
-   - Example: User said "더 있어?" → "네, 영등포 견과류 알레르기 안전한 다른 맛집도 찾아봤어요..."
+2. **Context preservation (IMPORTANT for follow-ups)**:
+   - If original and rewritten queries differ, include KEY CONSTRAINTS in your response
+   - Constraints to mention: 위치, 조건, 주제 (e.g., "영등포", "견과류 알레르기 안전한", "맛집")
+   - This helps maintain context for future follow-up questions
+   - Example: User said "더 있어?" → "영등포에서 견과류 알레르기 안전한 다른 맛집도 찾아봤어요. ..."
+   - Example: User said "또?" → "쿠버네티스 네트워크 관련해서 추가로 ..."
 3. If the interpretation seems wrong, you may ask for clarification
 4. Do NOT call new tools or create new plans
 5. Be honest if results are missing or failed
